@@ -1,0 +1,85 @@
+2025-08-13 22:33:10,496 - root - INFO - === JIIT Portal Monitor Starting ===
+2025-08-13 22:33:10,498 - root - INFO - Environment variables loaded successfully
+2025-08-13 22:33:10,515 - jiit_checker - INFO - Attempting to login to JIIT webportal...
+2025-08-13 22:33:10,516 - session_manager - INFO - Starting login process with CAPTCHA handling...
+2025-08-13 22:33:11,097 - session_manager - INFO - Using existing captcha.py logic for CAPTCHA solving...
+2025-08-13 22:33:11,097 - captcha - INFO - Starting CAPTCHA solving process...
+2025-08-13 22:33:11,162 - captcha - ERROR - CAPTCHA solving error: 404 Client Error: Not Found for url: https://webportal.jiit.ac.in:6011/studentportal/GetCaptchaImage
+2025-08-13 22:33:11,163 - session_manager - ERROR - Failed to solve CAPTCHA using existing logic
+2025-08-13 22:33:11,163 - session_manager - ERROR - Failed to solve CAPTCHA
+2025-08-13 22:33:11,167 - root - ERROR - Failed to initialize services: Failed to login to JIIT portal
+2025-08-13 22:33:11,167 - root - ERROR - Failed to initialize services, exiting
+2025-08-13 22:33:11,167 - root - INFO - === JIIT Portal Monitor Stopped ===
+2025-08-13 22:37:43,581 - root - INFO - === JIIT Portal Monitor Starting ===
+2025-08-13 22:37:43,583 - root - INFO - Environment variables loaded successfully
+2025-08-13 22:37:43,583 - jiit_checker - INFO - Attempting to login to JIIT webportal...
+2025-08-13 22:37:43,583 - session_manager - INFO - Starting login process with PyJIIT CAPTCHA handling...
+2025-08-13 22:37:43,874 - session_manager - INFO - CAPTCHA fetched successfully
+2025-08-13 22:37:44,133 - session_manager - ERROR - Login error: status:
+{'errors': ['Invalid captcha submitted..'],
+ 'identifier': 'USERSERVICE.',
+ 'responseStatus': 'Failure'}
+2025-08-13 22:37:44,134 - jiit_checker - ERROR - Login failed
+2025-08-13 22:37:44,134 - root - ERROR - Failed to initialize services: Failed to login to JIIT portal
+2025-08-13 22:37:44,134 - root - ERROR - Failed to initialize services, exiting
+2025-08-13 22:37:44,134 - root - INFO - === JIIT Portal Monitor Stopped ===
+2025-08-13 22:41:35,363 - root - INFO - === JIIT Portal Monitor Starting ===
+2025-08-13 22:41:35,364 - root - INFO - Environment variables loaded successfully
+2025-08-13 22:41:35,364 - notifier - INFO - WhatsApp notifier initialized successfully
+2025-08-13 22:41:35,365 - jiit_checker - INFO - Attempting to login to JIIT webportal...
+2025-08-13 22:41:35,365 - session_manager - INFO - Starting login process with PyJIIT default CAPTCHA...
+2025-08-13 22:41:37,096 - session_manager - INFO - Login successful! Client ID: JAYPEE
+2025-08-13 22:41:37,097 - jiit_checker - INFO - Login successful!
+2025-08-13 22:41:37,097 - jiit_checker - INFO - Session active: {'logged_in': True, 'headers_count': 2, 'session_active': True, 'client_id': 'JAYPEE'}
+2025-08-13 22:41:37,097 - root - INFO - JIIT portal login successful
+2025-08-13 22:41:37,935 - notifier - INFO - WhatsApp message sent successfully. SID: SM63184fc0c2122343455c4525701a5c5b
+2025-08-13 22:41:37,935 - root - INFO - Services initialized (portal connection may be retried)
+2025-08-13 22:41:37,935 - root - INFO - Starting periodic checks every 60 minutes
+2025-08-13 22:41:37,936 - root - INFO - All systems ready, starting webhook server...
+2025-08-13 22:41:37,936 - root - INFO - Starting periodic portal check...
+2025-08-13 22:41:37,937 - root - INFO - Starting webhook server on 0.0.0.0:5000
+2025-08-13 22:41:37,937 - jiit_checker - INFO - Fetching attendance data...
+2025-08-13 22:41:52,866 - jiit_checker - ERROR - Error fetching attendance: can only concatenate str (not "int") to str
+2025-08-13 22:41:52,867 - jiit_checker - ERROR - Error checking for changes: can only concatenate str (not "int") to str
+2025-08-13 22:41:52,867 - root - ERROR - Error during periodic check: can only concatenate str (not "int") to str
+2025-08-13 22:46:52,868 - root - INFO - Starting periodic portal check...
+2025-08-13 22:46:52,868 - jiit_checker - INFO - Fetching attendance data...
+2025-08-13 22:47:07,922 - jiit_checker - ERROR - Error fetching attendance: can only concatenate str (not "int") to str
+2025-08-13 22:47:07,923 - jiit_checker - ERROR - Error checking for changes: can only concatenate str (not "int") to str
+2025-08-13 22:47:07,923 - root - ERROR - Error during periodic check: can only concatenate str (not "int") to str
+2025-08-13 22:47:53,250 - root - INFO - Received signal 2, shutting down gracefully...
+2025-08-13 22:47:53,251 - jiit_checker - INFO - Cleaning up session...
+2025-08-13 22:47:53,251 - session_manager - INFO - Logged out successfully
+2025-08-13 22:47:53,251 - root - INFO - === JIIT Portal Monitor Stopped ===
+2025-08-13 23:40:57,671 - root - INFO - === JIIT Portal Monitor Starting ===
+2025-08-13 23:40:57,672 - root - INFO - Environment variables loaded successfully
+2025-08-13 23:40:57,673 - notifier - INFO - WhatsApp notifier initialized successfully
+2025-08-13 23:40:57,673 - jiit_checker - INFO - Attempting to login to JIIT webportal...
+2025-08-13 23:40:57,673 - session_manager - INFO - Starting login process with PyJIIT default CAPTCHA...
+2025-08-13 23:41:00,409 - session_manager - INFO - Login successful! Client ID: JAYPEE
+2025-08-13 23:41:00,409 - jiit_checker - INFO - Login successful!
+2025-08-13 23:41:00,409 - jiit_checker - INFO - Session active: {'logged_in': True, 'headers_count': 2, 'session_active': True, 'client_id': 'JAYPEE'}
+2025-08-13 23:41:00,409 - root - INFO - JIIT portal login successful
+2025-08-13 23:41:01,015 - notifier - INFO - WhatsApp message sent successfully. SID: SMe145fd51708a44388b61cb75f2850ac6
+2025-08-13 23:41:01,016 - root - INFO - Services initialized (portal connection may be retried)
+2025-08-13 23:41:01,016 - root - INFO - Starting periodic checks every 60 minutes
+2025-08-13 23:41:01,016 - root - INFO - All systems ready, starting webhook server...
+2025-08-13 23:41:01,016 - root - INFO - Starting periodic portal check...
+2025-08-13 23:41:01,018 - root - INFO - Starting webhook server on 0.0.0.0:5000
+2025-08-13 23:41:01,018 - jiit_checker - INFO - Fetching attendance data...
+2025-08-13 23:41:15,761 - jiit_checker - INFO - Processing 11 attendance records
+2025-08-13 23:41:15,762 - jiit_checker - INFO - Available fields: ['LTpercantage', 'Lpercentage', 'Lprepercentage', 'Lpretotalclass', 'Lpretotalpres', 'Lsubjectcomponentcode', 'Lsubjectcomponentid', 'Ltotalclass', 'Ltotalpres', 'Ppercentage', 'Pprepercentage', 'Ppretotalclass', 'Ppretotalpres', 'Psubjectcomponentcode', 'Psubjectcomponentid', 'Tpercentage', 'Tprepercentage', 'Tpretotalclass', 'Tpretotalpres', 'Tsubjectcomponentcode', 'Tsubjectcomponentid', 'Ttotalclass', 'Ttotalpres', 'abseent', 'individualsubjectcode', 'slno', 'subjectcode', 'subjectid']
+2025-08-13 23:41:15,762 - jiit_checker - INFO - Attendance fetched: 34.0%
+2025-08-13 23:41:15,763 - jiit_checker - INFO - Fetching marks data...
+2025-08-13 23:41:18,601 - jiit_checker - INFO - Marks fetched: CGPA 0.0
+2025-08-13 23:41:18,601 - jiit_checker - INFO - Fetching notices...
+2025-08-13 23:41:18,601 - jiit_checker - INFO - Fetched 1 notices
+2025-08-13 23:41:18,601 - jiit_checker - WARNING - Attendance below threshold: 34.0% < 75.0%
+2025-08-13 23:41:18,602 - jiit_checker - INFO - Found 1 new notices
+2025-08-13 23:41:18,996 - notifier - INFO - WhatsApp message sent successfully. SID: SM88a362505f89cfdd1e6d141f4a397267
+2025-08-13 23:41:19,311 - notifier - INFO - WhatsApp message sent successfully. SID: SM725e0ccd867491f4956b8be68c8eba52
+2025-08-13 23:41:19,312 - root - INFO - Check completed - Attendance: 34.0%, CGPA: 0.0, Notices: 1
+2025-08-13 23:43:49,168 - root - INFO - Received signal 2, shutting down gracefully...
+2025-08-13 23:43:49,168 - jiit_checker - INFO - Cleaning up session...
+2025-08-13 23:43:49,169 - session_manager - INFO - Logged out successfully
+2025-08-13 23:43:49,169 - root - INFO - === JIIT Portal Monitor Stopped ===
