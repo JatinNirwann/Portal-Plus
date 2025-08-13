@@ -23,7 +23,7 @@ def setup_logging():
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler('jiit_monitor.log', encoding='utf-8')
+            logging.FileHandler('portalplus.log', encoding='utf-8')
         ]
     )
     
@@ -63,7 +63,7 @@ def initialize_services():
             if jiit_checker.login():
                 logging.info("JIIT portal login successful")
                 notifier.send_message(
-                    "JIIT Monitor Started\n\n"
+                    "PortalPlus Started\n\n"
                     "Your portal monitoring is now active!\n\n"
                     "I'll alert you about:\n"
                     "- Low attendance warnings\n"
@@ -74,7 +74,7 @@ def initialize_services():
             else:
                 logging.warning("JIIT portal login failed, but WhatsApp bot will still work")
                 notifier.send_message(
-                    "JIIT Monitor Started (Limited Mode)\n\n"
+                    "PortalPlus Started (Limited Mode)\n\n"
                     "WhatsApp bot is active, but portal connection failed.\n\n"
                     "Portal login will be retried automatically.\n"
                     "Send 'help' for available commands."
@@ -82,7 +82,7 @@ def initialize_services():
         except Exception as portal_error:
             logging.error(f"Portal login failed: {portal_error}")
             notifier.send_message(
-                "JIIT Monitor Started (Bot Only)\n\n"
+                "PortalPlus Started (Bot Only)\n\n"
                 "WhatsApp bot is active, but portal connection is unavailable.\n\n"
                 "Will keep trying to connect to portal.\n"
                 "Send 'help' for available commands."
@@ -217,7 +217,7 @@ def get_jiit_checker() -> Optional[JIITChecker]:
 def main():
     try:
         setup_logging()
-        logging.info("=== JIIT Portal Monitor Starting ===")
+        logging.info("=== PortalPlus Starting ===")
         
         load_environment()
         
@@ -240,7 +240,7 @@ def main():
         logging.error(f"Unexpected error: {e}")
         sys.exit(1)
     finally:
-        logging.info("=== JIIT Portal Monitor Stopped ===")
+        logging.info("=== PortalPlus Stopped ===")
 
 
 if __name__ == "__main__":
