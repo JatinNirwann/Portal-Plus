@@ -5,7 +5,7 @@ PortalPlus - Technical Flow
 Overview
 ========
 
-The PortalPlus is a comprehensive Python application that provides automated monitoring of the JIIT (Jaypee Institute of Information Technology) Webportal. It monitors student attendance, marks/grades, and notices, delivering real-time notifications via WhatsApp and providing an interactive chatbot interface for on-demand queries.
+The PortalPlus is a comprehensive Python application that provides automated monitoring of the JIIT (Jaypee Institute of Information Technology) Webportal. It monitors student attendance and delivers real-time notifications via Telegram bot, providing an interactive interface for on-demand queries.
 
 Architecture Overview
 ====================
@@ -22,9 +22,9 @@ The application follows a modular architecture with the following core component
              │                        │                       │
              ▼                        ▼                       ▼
     ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-    │   WhatsApp      │    │  Data Storage   │    │   CAPTCHA       │
+    │   Telegram      │    │  Data Storage   │    │   CAPTCHA       │
     │   Notifier      │    │  (In-Memory)    │    │   Handler       │
-    │  (notifier.py)  │    │                 │    │  (captcha.py)   │
+    │(telegram_notifier.py)│                 │    │  (captcha.py)   │
     └─────────────────┘    └─────────────────┘    └─────────────────┘
 
 Core Components
@@ -33,16 +33,15 @@ Core Components
 1. Main Module (main.py)
 ------------------------
 
-**Purpose**: Central orchestrator managing all services and threads
+**Purpose**: Central orchestrator managing all services and background monitoring
 
 **Key Functions**:
 
 - **Environment Setup**: Loads and validates environment variables
-- **Service Initialization**: Initializes JIIT checker and WhatsApp notifier
-- **Threading Management**: Runs periodic checks in background thread
-- **Webhook Server**: Hosts Flask server for WhatsApp webhook handling
+- **Service Initialization**: Initializes JIIT checker and Telegram notifier
+- **Background Monitoring**: Runs periodic attendance checks
 - **Signal Handling**: Graceful shutdown on SIGINT/SIGTERM
-- **Error Recovery**: Automatic retry logic with exponential backoff
+- **Error Recovery**: Automatic retry logic for portal connections
 
 **Technical Flow**:
 
@@ -52,13 +51,13 @@ Core Components
        │
        ├─ Start Background Thread: periodic_check()
        │
-       └─ Start Main Thread: run_webhook_server()
+       └─ Start Telegram Bot: telegram_notifier.start_bot()
 
 **Error Handling Strategy**:
 
-- Maximum 3 consecutive failures before user notification
-- 5-minute cooldown between retry attempts
+- Automatic portal connection retry with exponential backoff
 - Separate error tracking for portal and notification services
+- Graceful degradation when portal is unavailable
 
 2. JIIT Checker (jiit_checker.py)
 ---------------------------------
@@ -68,8 +67,8 @@ Core Components
 **Key Capabilities**:
 
 - **Authentication Management**: Login with automatic session renewal
-- **Data Fetching**: Retrieves attendance, marks, and notices
-- **Change Detection**: Compares current data with previous snapshots
+- **Attendance Fetching**: Retrieves current attendance data
+- **Change Detection**: Monitors attendance changes over time
 - **Threshold Monitoring**: Tracks attendance against configurable thresholds
 
 **Data Structures**:
@@ -79,25 +78,14 @@ Core Components
     # Attendance Data Structure
     {
         'attendance_percentage': float,
-        'attended_classes': int,
-        'total_classes': int,
-        'subjects': [
-            {
-                'name': str,
-                'attended': int,
-                'total': int,
-                'percentage': float
+        'subjects': {
+            'subject_name': {
+                'percentage': float,
+                'present': int,
+                'total': int
             }
-        ]
+        }
     }
-
-    # Marks Data Structure
-    {
-        'cgpa': float,
-        'sgpa': float,
-        'subjects': [
-            {
-                'name': str,
                 'marks': str,
                 'grade': str,
                 'credits': int
@@ -147,29 +135,50 @@ Core Components
 
 **Purpose**: Manages WhatsApp communication via Twilio API
 
-**Features**:
+3. Telegram Notifier (telegram_notifier.py)
+-------------------------------------------
 
-- **Automated Notifications**: Sends alerts for attendance, marks, notices
-- **Interactive Chatbot**: Processes incoming messages and commands
-- **Message Formatting**: Optimizes messages for WhatsApp display
-- **Multi-recipient Support**: Can send to multiple phone numbers
+**Purpose**: Manages all Telegram bot interactions and notifications
+
+**Key Capabilities**:
+
+- **Bot Management**: Handles Telegram bot initialization and polling
+- **Command Processing**: Processes user commands and queries
+- **Message Formatting**: Formats attendance data with HTML markup
+- **Interactive Interface**: Provides real-time portal data access
 
 **Supported Commands**:
 
 .. code-block::
 
-    'attendance' | 'att' → Current attendance summary
-    'marks' | 'grade' → Latest marks and CGPA
-    'notices' → Recent notices from portal
-    'help' → Available commands list
-    'status' → System health check
+    '/start' → Welcome message and setup
+    '/help' → Available commands list  
+    '/attendance' → Current attendance report
+    '/interval [minutes]' → Set monitoring interval (5-1440 minutes)
+    '/status' → Bot and portal connection status
 
-**Message Types**:
+**Message Features**:
 
-1. **Attendance Alerts**: Triggered when attendance drops below threshold
-2. **Marks Updates**: Sent when new grades are available
-3. **Notice Alerts**: Forwarded when new notices are posted
-4. **System Messages**: Status updates and error notifications
+1. **Attendance Reports**: Clean formatted attendance with bold subject names
+2. **Interval Management**: User-configurable monitoring frequency
+3. **Status Updates**: Real-time system health information
+4. **Error Handling**: User-friendly error messages and guidance
+
+**Message Formatting**:
+- HTML parsing enabled for bold text formatting
+- Clean subject-wise attendance display
+- Minimal, focused information presentation
+
+4. Session Manager (session_manager.py)
+--------------------------------------
+
+**Purpose**: Handles JIIT portal authentication and session management
+
+**Key Functions**:
+- Portal login with PyJIIT integration
+- Session validation and renewal
+- CAPTCHA handling with default solver
+- Login state management
 
 5. CAPTCHA Handler (captcha.py)
 -------------------------------
@@ -193,11 +202,48 @@ Application Startup Sequence
 
     1. Load Environment Variables
        ├─ JIIT credentials (username, password)
-       ├─ Twilio configuration (SID, token, phone numbers)
+       ├─ Telegram configuration (bot token, chat ID)
        └─ Operational settings (intervals, thresholds)
 
     2. Initialize Logging System
        ├─ Console output (INFO level)
+       └─ File logging (jiit_monitor.log)
+
+    3. Initialize Services
+       ├─ JIIT Checker with session manager
+       ├─ Telegram Bot with command handlers
+       └─ Background monitoring thread
+
+    4. Start Operations
+       ├─ Portal login attempt
+       ├─ Telegram bot polling
+       └─ Periodic attendance monitoring
+
+Telegram Bot Interaction Flow
+-----------------------------
+
+**Command Processing**:
+
+.. code-block::
+
+    User sends command → Bot receives update → Parse command → Execute action → Send formatted response
+
+**Supported Interaction Patterns**:
+
+1. **Attendance Queries**:
+   - User sends /attendance command
+   - Bot fetches live data from portal
+   - Formatted HTML response with bold subject names
+
+2. **Interval Management**:
+   - User sets monitoring frequency with /interval
+   - Validation for 5-1440 minute range
+   - Persistent configuration update
+
+3. **Status Monitoring**:
+   - Real-time portal connection status
+   - Bot operational health reporting
+   - System uptime information
        ├─ File logging (portalplus.log)
        └─ External library filtering
 
@@ -275,29 +321,82 @@ WhatsApp Interaction Flow
 Error Handling and Recovery
 ===========================
 
+Error Handling and Recovery
+===========================
+
 Portal Connection Failures
 ---------------------------
 
 .. code-block::
 
-    Connection Attempt → Failure Detected → Increment Counter
+    Connection Attempt → Failure Detected → Log Error → Continue Monitoring
         │
-        ├─ Counter < 3: Log warning, retry after 5 minutes
+        ├─ Network Issues: Automatic retry on next cycle
         │
-        └─ Counter ≥ 3: Send user notification, reset counter
+        └─ Authentication Failures: Session renewal attempt
 
-WhatsApp Service Failures
+Telegram Service Failures
 --------------------------
 
 - Automatic retry for transient network issues
-- Graceful degradation if Twilio service unavailable
-- Separate error tracking from portal failures
+- Graceful degradation if Telegram API unavailable
+- Connection pooling for reliable message delivery
 
 Session Management Failures
 ----------------------------
 
 - Automatic re-login on session expiry
 - CAPTCHA failure handling with retry logic
+- Session state validation before portal requests
+
+Deployment and Infrastructure
+=============================
+
+Deployment Requirements
+-----------------------
+
+.. code-block::
+
+    Production Environment:
+    ├─ Python 3.11+ Runtime
+    ├─ Stable internet connection
+    ├─ Process Manager (PM2/Supervisor) - optional
+    ├─ Environment variable management (.env file)
+    └─ Telegram Bot Token and Chat ID configuration
+
+**Resource Requirements**:
+- **CPU**: Minimal (single-threaded polling)
+- **RAM**: 256MB (lightweight bot application)
+- **Storage**: 500MB (dependencies and logs)
+- **Network**: Stable internet for Telegram API and JIIT portal
+
+**Scalability Considerations**:
+- Single-instance design (per student)
+- Stateless bot architecture
+- Easy horizontal scaling for multiple students
+
+Configuration Management
+========================
+
+Environment Variables
+----------------------
+
+.. code-block:: bash
+
+    # JIIT Portal Credentials
+    JIIT_USERNAME=your_enrollment_number
+    JIIT_PASSWORD=your_portal_password
+
+    # Telegram Bot Configuration
+    TELEGRAM_BOT_TOKEN=your_bot_token
+    TELEGRAM_CHAT_ID=your_chat_id
+
+    # Monitoring Configuration
+    CHECK_INTERVAL_MINUTES=60
+    ATTENDANCE_THRESHOLD=75
+
+    # Logging Configuration
+    LOG_LEVEL=INFO
 - Credential validation and error reporting
 
 Data Consistency and Storage
@@ -453,15 +552,24 @@ Logging Strategy
     WARN:  Recoverable errors and retries
     ERROR: Serious issues requiring attention
 
+**Log Management**:
+
+.. code-block::
+
+    DEBUG: Detailed execution flow
+    INFO:  Normal operations and status  
+    WARN:  Recoverable errors and retries
+    ERROR: Serious issues requiring attention
+
 **Log Destinations**:
 - Console output for real-time monitoring
-- File logging for historical analysis
-- Structured format for log parsing
+- File logging (jiit_monitor.log) for historical analysis
+- Structured format for operational insights
 
 **Key Metrics Tracked**:
-- Login success/failure rates
-- Data fetch response times
-- WhatsApp delivery success rates
+- Portal login success/failure rates
+- Attendance data fetch response times
+- Telegram bot message delivery rates
 - Error frequency and types
 
 Health Monitoring
@@ -469,14 +577,14 @@ Health Monitoring
 
 **System Health Indicators**:
 - Portal connection status
-- WhatsApp service availability
-- Background thread health
-- Memory and CPU usage
+- Telegram bot availability
+- Background monitoring thread health
+- Memory and process status
 
-**Alerting Mechanisms**:
-- WhatsApp notifications for critical failures
-- Log-based monitoring for operational issues
-- Periodic health check reports
+**Monitoring Commands**:
+- /status command for real-time health check
+- Log analysis for operational issues
+- Telegram notifications for critical issues
 
 Future Enhancement Opportunities
 ================================
@@ -484,30 +592,26 @@ Future Enhancement Opportunities
 Potential Improvements
 ----------------------
 
-1. **Database Integration**:
-   - Persistent data storage
-   - Historical trend analysis
-   - Data backup and recovery
+1. **Enhanced Features**:
+   - Multi-student support
+   - Attendance prediction and trends
+   - Grade monitoring integration
+   - Notice monitoring capabilities
 
 2. **Advanced Analytics**:
-   - Attendance prediction models
+   - Historical attendance tracking
    - Performance trend analysis
-   - Automated study recommendations
+   - Automated alerts and reminders
 
-3. **Multi-Platform Support**:
-   - Telegram bot integration
-   - Email notifications
-   - Discord bot functionality
+3. **Platform Extensions**:
+   - Discord bot integration
+   - Web dashboard interface
+   - Mobile app development
 
 4. **Enhanced Security**:
-   - OAuth authentication
-   - End-to-end message encryption
-   - Rate limiting and abuse prevention
-
-5. **User Interface**:
-   - Web dashboard
-   - Mobile application
-   - Advanced configuration management
+   - Encrypted credential storage
+   - Rate limiting for bot commands
+   - User authentication and authorization
 
 Technical Debt and Limitations
 ==============================
@@ -515,24 +619,29 @@ Technical Debt and Limitations
 Current Limitations
 -------------------
 
-1. **Single User Design**: Supports one student per instance
-2. **Memory-Only Storage**: No data persistence across restarts
-3. **Basic Error Recovery**: Limited retry strategies
-4. **Static Configuration**: Requires restart for configuration changes
+1. **Single User Design**: Supports one student per bot instance
+2. **Memory-Only Storage**: No persistent data across restarts
+3. **Basic Monitoring**: Limited to attendance data only
+4. **Static Configuration**: Requires restart for some configuration changes
 
 Known Technical Debt
 --------------------
 
 1. **Hardcoded Subject Mappings**: Should be externalized to configuration
-2. **Synchronous API Calls**: Could benefit from async implementation
-3. **Limited Test Coverage**: Needs comprehensive unit and integration tests
-4. **Basic Logging**: Could benefit from structured logging with metrics
+2. **Limited Error Recovery**: Could benefit from more sophisticated retry strategies
+3. **Basic Logging**: Could benefit from structured logging with metrics
+4. **Manual Bot Setup**: Requires manual Telegram bot creation and configuration
 
 Conclusion
 ==========
 
-The PortalPlus represents a robust, production-ready solution for automated academic monitoring. Its modular architecture, comprehensive error handling, and real-time notification capabilities make it an effective tool for students to stay informed about their academic progress.
+The PortalPlus Telegram bot represents a streamlined, efficient solution for automated attendance monitoring. Its simplified architecture focuses on core functionality while maintaining reliability and ease of use.
 
-The application's design prioritizes reliability, ease of deployment, and user experience while maintaining security and performance standards. Its current implementation provides a solid foundation for future enhancements and can be easily adapted for different institutional portals or extended with additional features.
+The current implementation provides:
+- Real-time attendance monitoring via Telegram
+- User-friendly command interface
+- Configurable monitoring intervals
+- Robust error handling and recovery
+- Clean, formatted attendance reports
 
-The technical architecture demonstrates best practices in Python application development, including proper separation of concerns, error handling, logging, and configuration management. This makes it both maintainable for developers and reliable for end users.
+The bot's design prioritizes simplicity, reliability, and user experience, making it an effective tool for students to stay informed about their attendance status through a familiar messaging platform. Its modular architecture allows for easy maintenance and future enhancements.
