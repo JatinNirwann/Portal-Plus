@@ -2,8 +2,6 @@
 PortalPlus - Technical Flow
 =============================
 
-portalplusbot
-7377513234:AAGEnGzvnbxQ5_PBCcWeBHjDVL0SOpghRfk
 Overview
 ========
 
