@@ -4,14 +4,15 @@ import logging
 import threading
 import time
 import signal
+import asyncio
 from typing import Optional
 from dotenv import load_dotenv
 
 from jiit_checker import JIITChecker
-from notifier import WhatsAppNotifier, create_webhook_app
+from telegram_notifier import TelegramNotifier
 
 jiit_checker: Optional[JIITChecker] = None
-notifier: Optional[WhatsAppNotifier] = None
+notifier: Optional[TelegramNotifier] = None
 running = True
 
 
@@ -37,8 +38,7 @@ def load_environment():
     
     required_vars = [
         'JIIT_USERNAME', 'JIIT_PASSWORD',
-        'TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN',
-        'TWILIO_WHATSAPP_FROM', 'WHATSAPP_TO'
+        'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'
     ]
     
     missing_vars = [var for var in required_vars if not os.getenv(var)]
@@ -57,37 +57,37 @@ def initialize_services():
         password = os.getenv('JIIT_PASSWORD')
         jiit_checker = JIITChecker(username, password)
         
-        notifier = WhatsAppNotifier()
+        notifier = TelegramNotifier()
+        notifier.set_jiit_checker(jiit_checker)
         
         try:
             if jiit_checker.login():
                 logging.info("JIIT portal login successful")
-                notifier.send_message(
+                notifier.send_message_sync(
                     "PortalPlus Started\n\n"
-                    "Your portal monitoring is now active!\n\n"
+                    "Your portal monitoring is now active.\n\n"
                     "I'll alert you about:\n"
-                    "- Low attendance warnings\n"
-                    "- New marks/grades\n"
-                    "- Important notices\n\n"
-                    "Send 'help' anytime for commands."
+                    "- Low attendance warnings\n\n"
+                    "Send /help anytime for commands."
                 )
             else:
-                logging.warning("JIIT portal login failed, but WhatsApp bot will still work")
-                notifier.send_message(
+                logging.warning("JIIT portal login failed, but Telegram bot will still work")
+                notifier.send_message_sync(
                     "PortalPlus Started (Limited Mode)\n\n"
-                    "WhatsApp bot is active, but portal connection failed.\n\n"
+                    "Telegram bot is active, but portal connection failed.\n\n"
                     "Portal login will be retried automatically.\n"
-                    "Send 'help' for available commands."
+                    "Send /help for available commands."
                 )
         except Exception as portal_error:
             logging.error(f"Portal login failed: {portal_error}")
-            notifier.send_message(
+            notifier.send_message_sync(
                 "PortalPlus Started (Bot Only)\n\n"
-                "WhatsApp bot is active, but portal connection is unavailable.\n\n"
+                "Telegram bot is active, but portal connection is unavailable.\n\n"
                 "Will keep trying to connect to portal.\n"
-                "Send 'help' for available commands."
+                "Send /help for available commands."
             )
         
+        notifier.run_bot()
         logging.info("Services initialized (portal connection may be retried)")
         return True
         
@@ -118,10 +118,10 @@ def periodic_check():
                 logging.warning(f"Portal connection failed (attempt {consecutive_failures}/{max_failures})")
                 
                 if consecutive_failures >= max_failures:
-                    notifier.send_message(
+                    notifier.send_message_sync(
                         "Portal Connection Issues\n\n"
                         "Unable to connect to JIIT portal after multiple attempts.\n\n"
-                        "WhatsApp bot remains active, but portal monitoring is temporarily disabled.\n"
+                        "Telegram bot remains active, but portal monitoring is temporarily disabled.\n"
                         "Will continue trying to reconnect..."
                     )
                     consecutive_failures = 0
@@ -134,23 +134,14 @@ def periodic_check():
             changes = jiit_checker.check_for_changes()
             
             if changes['attendance_below_threshold']:
-                notifier.send_attendance_alert(changes['current_data']['attendance'])
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(notifier.send_attendance_alert(changes['current_data']['attendance']))
+                loop.close()
             
-            if changes['marks_changed']:
-                notifier.send_marks_update(changes['current_data']['marks'])
-            
-            if changes['new_notices']:
-                notifier.send_new_notices_alert(changes['new_notices'])
-            
-            # Log summary
             attendance_pct = changes['current_data']['attendance']['attendance_percentage']
-            gpa = changes['current_data']['marks']['cgpa']
-            notices_count = len(changes['current_data']['notices'])
             
-            logging.info(
-                f"Check completed - Attendance: {attendance_pct:.1f}%, "
-                f"CGPA: {gpa}, Notices: {notices_count}"
-            )
+            logging.info(f"Check completed - Attendance: {attendance_pct:.1f}%")
             
             time.sleep(check_interval)
             
@@ -160,42 +151,16 @@ def periodic_check():
             
             if consecutive_failures >= max_failures and notifier:
                 try:
-                    notifier.send_message(
+                    notifier.send_message_sync(
                         "Monitoring Error\n\n"
                         "Experiencing technical difficulties with portal monitoring.\n\n"
-                        "WhatsApp bot remains active. Will keep trying to restore monitoring..."
+                        "Telegram bot remains active. Will keep trying to restore monitoring..."
                     )
                     consecutive_failures = 0
                 except:
                     pass
             
             time.sleep(300)
-
-
-def run_webhook_server():
-    global notifier
-    
-    if not notifier:
-        logging.error("Notifier not initialized, cannot start webhook server")
-        return
-    
-    try:
-        app = create_webhook_app(notifier)
-        host = os.getenv('WEBHOOK_HOST', '0.0.0.0')
-        port = int(os.getenv('WEBHOOK_PORT', 5000))
-        
-        logging.info(f"Starting webhook server on {host}:{port}")
-        
-        app.run(
-            host=host,
-            port=port,
-            debug=False,
-            use_reloader=False,
-            threaded=True
-        )
-        
-    except Exception as e:
-        logging.error(f"Error running webhook server: {e}")
 
 
 def signal_handler(signum, frame):
@@ -231,8 +196,13 @@ def main():
         checker_thread = threading.Thread(target=periodic_check, daemon=True)
         checker_thread.start()
         
-        logging.info("All systems ready, starting webhook server...")
-        run_webhook_server()
+        logging.info("Monitoring system started, checking portal periodically...")
+        
+        try:
+            while running:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            logging.info("Application interrupted by user")
         
     except KeyboardInterrupt:
         logging.info("Application interrupted by user")

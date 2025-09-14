@@ -1,2 +1,7 @@
 .env
-
+__pycache__
+.venv
+*.log
+logs/
+portalplus.log
+jiit_monitor.log

@@ -2,7 +2,16 @@ import os
 import logging
 import time
 from typing import Dict, Any, Optional, List
-from session_manager import SessionManager, LoginError, APIError, SessionExpired
+from session_manager import SessionManager, LoginError
+
+
+class SessionExpired(Exception):
+    pass
+
+
+class APIError(Exception):
+    pass
+
 
 logger = logging.getLogger(__name__)
 
@@ -105,15 +114,12 @@ class JIITChecker:
             if not webportal:
                 raise APIError("No webportal session available")
             
-            # Use the exact pattern from PyJIIT documentation
             meta = webportal.get_attendance_meta()
             header = meta.latest_header()
             sem = meta.latest_semester()
             
-            # Get detailed attendance (this may take over 10 seconds as per docs)
             attendance_response = webportal.get_attendance(header, sem)
             
-            # Parse the attendance response
             total_classes = 0
             attended_classes = 0
             subject_attendance = {}
@@ -121,7 +127,7 @@ class JIITChecker:
             if 'studentattendancelist' in attendance_response:
                 logger.info(f"Processing {len(attendance_response['studentattendancelist'])} attendance records")
                 for i, subject_data in enumerate(attendance_response['studentattendancelist']):
-                    if i == 0:  # Log field names for first record
+                    if i == 0:
                         logger.info(f"Available fields: {list(subject_data.keys())}")
                     
                     # Extract subject information - try multiple possible field names
@@ -132,17 +138,14 @@ class JIITChecker:
                                   subject_data.get('subject_desc') or
                                   'Unknown Subject')
                     
-                    # Get lecture attendance data and ensure they're numeric
                     l_total = int(subject_data.get('Ltotalclass', 0) or 0)
                     l_present = int(subject_data.get('Ltotalpres', 0) or 0)
                     l_percentage = float(subject_data.get('Lpercentage', 0.0) or 0.0)
                     
-                    # Get tutorial attendance data if available
                     lt_total = int(subject_data.get('LTtotalclass', 0) or 0)
                     lt_present = int(subject_data.get('LTtotalpres', 0) or 0)
                     lt_percentage = float(subject_data.get('LTpercentage', 0.0) or 0.0)
                     
-                    # Get practical attendance data if available
                     p_total = int(subject_data.get('Ptotalclass', 0) or 0)
                     p_present = int(subject_data.get('Ptotalpres', 0) or 0)
                     p_percentage = float(subject_data.get('Ppercentage', 0.0) or 0.0)
@@ -160,8 +163,6 @@ class JIITChecker:
                     total_classes += subject_total
                     attended_classes += subject_present
                     
-                    # Use the overall LTP percentage first (this is what the portal shows)
-                    # If not available, fall back to individual components
                     if overall_ltp_percentage > 0:
                         subject_percentage = overall_ltp_percentage
                     elif p_percentage > 0:
