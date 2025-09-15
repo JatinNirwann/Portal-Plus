@@ -15,55 +15,18 @@ class APIError(Exception):
 
 logger = logging.getLogger(__name__)
 
-
 def get_short_subject_name(full_name: str) -> str:
     name = full_name.split('(')[0].strip()
-    
-    subject_map = {
-        'COMPUTER ORGANISATION AND ARCHITECTURE LAB': 'COA Lab',
-        'COMPUTER ORGANISATION AND ARCHITECTURE': 'COA',
-        'OPERATING SYSTEMS AND SYSTEMS PROGRAMMING LAB': 'OS Lab',
-        'OPERATING SYSTEMS AND SYSTEMS PROGRAMMING': 'OS',
-        'MINOR PROJECT-1': 'Minor Project',
-        'MINOR PROJECT': 'Minor Project',
-        'OPEN SOURCE SOFTWARE LAB': 'OSS Lab',
-        'INFORMATION SECURITY LAB': 'Info Security Lab',
-        'FUNDAMENTALS OF COMPUTER SECURITY': 'Computer Security',
-        'INDIAN CONSTITUTION & TRADITIONAL KNOWLEDGE': 'Constitution',
-        'FOUNDATIONS OF R SOFTWARE': 'R Programming',
-        'Consumer Behaviour': 'Consumer Behavior',
-        'DATABASE MANAGEMENT SYSTEMS LAB': 'DBMS Lab',
-        'DATABASE MANAGEMENT SYSTEMS': 'DBMS',
-        'SOFTWARE ENGINEERING': 'Software Eng',
-        'COMPUTER NETWORKS LAB': 'Networks Lab',
-        'COMPUTER NETWORKS': 'Networks',
-        'WEB TECHNOLOGIES LAB': 'Web Tech Lab',
-        'WEB TECHNOLOGIES': 'Web Tech',
-        'ARTIFICIAL INTELLIGENCE': 'AI',
-        'MACHINE LEARNING': 'ML',
-        'DATA STRUCTURES LAB': 'DSA Lab',
-        'DATA STRUCTURES': 'DSA',
-        'ALGORITHMS': 'Algorithms',
-        'PROGRAMMING': 'Programming',
-        'MATHEMATICS': 'Math',
-        'PHYSICS': 'Physics',
-        'CHEMISTRY': 'Chemistry',
-        'ENGLISH': 'English',
-        'COMMUNICATIONS': 'Communication'
-    }
-    
-    for full_subject, short_name in subject_map.items():
-        if full_subject.lower() == name.lower():
-            return short_name
-    
-    words = name.split()
-    if len(words) <= 2:
+    stopwords = {'and', 'of', 'the', 'in', 'on', 'for', 'to', 'with', 'by', 'at', 'from'}
+    words = [w for w in name.split() if w.lower() not in stopwords]
+    if not words:
         return name
-    elif 'LAB' in name.upper():
-        return f"{words[0]} Lab"
+    if 'LAB' in name.upper():
+        abbr = ''.join(word[0].upper() for word in words if word.upper() != 'LAB')
+        return f"{abbr} Lab" if abbr else "Lab"
     else:
-        return ' '.join(words[:2])
-
+        abbr = ''.join(word[0].upper() for word in words)
+        return abbr
 
 class JIITChecker:
     

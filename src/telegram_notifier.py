@@ -6,57 +6,9 @@ from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import threading
 import time
+from jiit_checker import get_short_subject_name
 
 logger = logging.getLogger(__name__)
-
-
-def get_short_subject_name(full_name: str) -> str:
-    name = full_name.split('(')[0].strip()
-    
-    subject_map = {
-        'COMPUTER ORGANISATION AND ARCHITECTURE LAB': 'COA Lab',
-        'COMPUTER ORGANISATION AND ARCHITECTURE': 'COA',
-        'OPERATING SYSTEMS AND SYSTEMS PROGRAMMING LAB': 'OS Lab',
-        'OPERATING SYSTEMS AND SYSTEMS PROGRAMMING': 'OS',
-        'MINOR PROJECT-1': 'Minor Project',
-        'MINOR PROJECT': 'Minor Project',
-        'OPEN SOURCE SOFTWARE LAB': 'OSS Lab',
-        'INFORMATION SECURITY LAB': 'Info Security Lab',
-        'FUNDAMENTALS OF COMPUTER SECURITY': 'Computer Security',
-        'INDIAN CONSTITUTION & TRADITIONAL KNOWLEDGE': 'Constitution',
-        'FOUNDATIONS OF R SOFTWARE': 'R Programming',
-        'Consumer Behaviour': 'Consumer Behavior',
-        'DATABASE MANAGEMENT SYSTEMS LAB': 'DBMS Lab',
-        'DATABASE MANAGEMENT SYSTEMS': 'DBMS',
-        'SOFTWARE ENGINEERING': 'Software Eng',
-        'COMPUTER NETWORKS LAB': 'Networks Lab',
-        'COMPUTER NETWORKS': 'Networks',
-        'WEB TECHNOLOGIES LAB': 'Web Tech Lab',
-        'WEB TECHNOLOGIES': 'Web Tech',
-        'ARTIFICIAL INTELLIGENCE': 'AI',
-        'MACHINE LEARNING': 'ML',
-        'DATA STRUCTURES LAB': 'DSA Lab',
-        'DATA STRUCTURES': 'DSA',
-        'ALGORITHMS': 'Algorithms',
-        'PROGRAMMING': 'Programming',
-        'MATHEMATICS': 'Math',
-        'PHYSICS': 'Physics',
-        'CHEMISTRY': 'Chemistry',
-        'ENGLISH': 'English',
-        'COMMUNICATIONS': 'Communication'
-    }
-    
-    for full_subject, short_name in subject_map.items():
-        if full_subject.lower() == name.lower():
-            return short_name
-    
-    if len(name) > 30:
-        words = name.split()
-        if len(words) > 3:
-            return ' '.join(words[:3]) + '...'
-        return name[:30] + '...'
-    
-    return name
 
 
 class TelegramNotifier:

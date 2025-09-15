@@ -1,4 +1,3 @@
-
 import logging
 from typing import Dict, Any, Optional
 from pyjiit import Webportal
@@ -56,7 +55,6 @@ class SessionManager:
         return self.logged_in and self.session is not None
     
     def get_webportal(self) -> Optional[Webportal]:
-        return self.webportal if self.logged_in else None
         return self.webportal if self.logged_in else None
     
     def get_session(self):
