@@ -15,12 +15,12 @@ class TelegramNotifier:
     def __init__(self):
         self.bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
         self.chat_id = os.getenv('TELEGRAM_CHAT_ID')
-        
+
         if not self.bot_token:
             raise ValueError("TELEGRAM_BOT_TOKEN environment variable is required")
         if not self.chat_id:
             raise ValueError("TELEGRAM_CHAT_ID environment variable is required")
-        
+
         self.bot = Bot(token=self.bot_token)
         self.application = None
         self.jiit_checker = None
@@ -50,25 +50,25 @@ class TelegramNotifier:
         try:
             attendance_pct = attendance_data.get('attendance_percentage', 0)
             subjects = attendance_data.get('subjects', {})
-            
+
             message = f"Low Attendance Alert\n\n"
             message += f"Overall Attendance: {attendance_pct:.1f}%\n\n"
-            
+
             low_subjects = []
             for subject, data in subjects.items():
                 percentage = data.get('percentage', 0)
                 if percentage < 75:
                     short_name = get_short_subject_name(subject)
                     low_subjects.append(f"- {short_name}: {percentage:.1f}%")
-            
+
             if low_subjects:
                 message += "Subjects below 75%:\n"
                 message += "\n".join(low_subjects)
             else:
                 message += "All subjects above 75%"
-            
+
             await self.send_message(message, parse_mode=None)
-            
+
         except Exception as e:
             logger.error(f"Error sending attendance alert: {e}")
 
@@ -77,11 +77,11 @@ class TelegramNotifier:
             cgpa = marks_data.get('cgpa', 0.0)
             sgpa = marks_data.get('sgpa', 0.0)
             subjects = marks_data.get('subjects', {})
-            
+
             message = f"Marks Update\n\n"
             message += f"CGPA: {cgpa:.2f}\n"
             message += f"SGPA: {sgpa:.2f}\n\n"
-            
+
             if subjects:
                 message += "Subject Updates:\n"
                 for subject, marks in list(subjects.items())[:5]:
@@ -92,9 +92,9 @@ class TelegramNotifier:
                         message += f"- {short_name}: {marks_val} ({grade})\n"
                     else:
                         message += f"- {short_name}: {marks}\n"
-            
+
             await self.send_message(message, parse_mode=None)
-            
+
         except Exception as e:
             logger.error(f"Error sending marks update: {e}")
 
@@ -102,20 +102,20 @@ class TelegramNotifier:
         try:
             if not notices:
                 return
-            
+
             message = f"New Notices\n\n"
-            
+
             for notice in notices[:3]:
                 title = notice.get('title', 'No Title')[:60]
                 date = notice.get('date', 'No Date')
                 message += f"- {title}\n"
                 message += f"  Date: {date}\n\n"
-            
+
             if len(notices) > 3:
                 message += f"... and {len(notices) - 3} more notices"
-            
+
             await self.send_message(message, parse_mode=None)
-            
+
         except Exception as e:
             logger.error(f"Error sending notices alert: {e}")
 
@@ -158,23 +158,23 @@ class TelegramNotifier:
                 return
 
             await update.message.reply_text("Fetching attendance data...")
-            
+
             attendance_data = self.jiit_checker.fetch_attendance()
             attendance_pct = attendance_data.get('attendance_percentage', 0)
             subjects = attendance_data.get('subjects', {})
-            
+
             message = f"Attendance Report\n\n"
-            
+
             if subjects:
                 message += "Subject-wise:\n"
                 for subject, data in list(subjects.items())[:8]:
                     short_name = get_short_subject_name(subject)
                     percentage = data.get('percentage', 0)
-                    
+
                     message += f"<b>{short_name}</b>:  {percentage:.1f}%\n"
-            
+
             await update.message.reply_text(message, parse_mode='HTML')
-            
+
         except Exception as e:
             logger.error(f"Error in attendance command: {e}")
             await update.message.reply_text("Error fetching attendance data")
@@ -190,10 +190,10 @@ class TelegramNotifier:
                     f"Valid range: 5 to 1440 minutes (24 hours)"
                 )
                 return
-            
+
             try:
                 new_interval = int(context.args[0])
-                
+
                 if new_interval < 5:
                     await update.message.reply_text(
                         f"Error: {new_interval} minutes is too low\n\n"
@@ -201,48 +201,65 @@ class TelegramNotifier:
                         f"Please use: /interval 5 or higher"
                     )
                     return
-                    
-                if new_interval > 1440:  # 24 hours
+
+                if new_interval > 1440:
                     await update.message.reply_text(
                         f"Error: {new_interval} minutes is too high\n\n"
                         f"Maximum interval is 1440 minutes (24 hours)\n"
                         f"Please use: /interval 1440 or lower"
                     )
                     return
-                
+
                 os.environ['CHECK_INTERVAL_MINUTES'] = str(new_interval)
-                
-                env_content = open('.env', 'r').read()
-                lines = env_content.split('\n')
-                updated_lines = []
-                found = False
-                
-                for line in lines:
-                    if line.startswith('CHECK_INTERVAL_MINUTES='):
+
+                env_path = os.path.join(os.path.dirname(__file__), '.env')
+
+                try:
+                    with open(env_path, 'r') as f:
+                        env_content = f.read()
+
+                    lines = env_content.split('\n')
+                    updated_lines = []
+                    found = False
+
+                    for line in lines:
+                        if line.startswith('CHECK_INTERVAL_MINUTES='):
+                            updated_lines.append(f'CHECK_INTERVAL_MINUTES={new_interval}')
+                            found = True
+                        else:
+                            updated_lines.append(line)
+
+                    if not found:
                         updated_lines.append(f'CHECK_INTERVAL_MINUTES={new_interval}')
-                        found = True
-                    else:
-                        updated_lines.append(line)
-                
-                if not found:
-                    updated_lines.append(f'CHECK_INTERVAL_MINUTES={new_interval}')
-                
-                with open('.env', 'w') as f:
+
+                    with open(env_path, 'w') as f:
+                        f.write('\n'.join(updated_lines))
+
+                except FileNotFoundError:
+                    logger.warning(f".env file not found at {env_path}, only updating environment variable")
+                except PermissionError:
+                    logger.error(f"Permission denied writing to {env_path}")
+                    await update.message.reply_text(
+                        f"Warning: Updated runtime interval to {new_interval} minutes,\n"
+                        f"but couldn't save to .env file (permission denied).\n\n"
+                        f"Changes will be lost on restart."
+                    )
+                    return
                     f.write('\n'.join(updated_lines))
-                
+
                 await update.message.reply_text(
                     f"Success: Check interval updated to {new_interval} minutes\n\n"
                     f"Portal will be checked every {new_interval} minutes\n"
-                    f"Changes take effect on next restart"
+                    f"Changes are now active!"
                 )
-                
+
             except ValueError:
                 await update.message.reply_text(
                     f"Error: '{context.args[0]}' is not a valid number\n\n"
                     f"Please enter a number between 5 and 1440\n"
                     f"Example: /interval 30"
                 )
-                
+
         except Exception as e:
             logger.error(f"Error in interval command: {e}")
             await update.message.reply_text("Error updating interval. Please try again.")
@@ -250,20 +267,20 @@ class TelegramNotifier:
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         checker_status = "Online" if self.jiit_checker else "Offline"
         current_interval = int(os.getenv('CHECK_INTERVAL_MINUTES', 60))
-        
+
         message = (
             "PortalPlus Status\n\n"
             f"Bot Status: Online\n"
-            f"Portal Checker: {checker_status}\n"
+            f"Portal Checker: {'Online' if self.jiit_checker else 'Offline'}\n"
             f"Monitoring: Active\n"
-            f"Check Interval: {current_interval} minutes\n\n"
+            f"Check Interval: {current_interval} minutes (live updates)\n\n"
             "Last updated: Just now"
         )
         await update.message.reply_text(message)
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         message_text = update.message.text.lower().strip()
-        
+
         if message_text.isdigit():
             number = int(message_text)
             if number < 5:
@@ -284,7 +301,7 @@ class TelegramNotifier:
                     f"Use the command: /interval {number}"
                 )
             return
-        
+
         if any(word in message_text for word in ['attendance', 'attend']):
             await self.attendance_command(update, context)
         elif any(word in message_text for word in ['interval', 'time', 'check']):
@@ -303,14 +320,14 @@ class TelegramNotifier:
 
     def setup_bot(self):
         self.application = Application.builder().token(self.bot_token).build()
-        
+
         self.application.add_handler(CommandHandler("start", self.start_command))
         self.application.add_handler(CommandHandler("help", self.help_command))
         self.application.add_handler(CommandHandler("attendance", self.attendance_command))
         self.application.add_handler(CommandHandler("interval", self.interval_command))
         self.application.add_handler(CommandHandler("status", self.status_command))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
-        
+
         logger.info("Telegram bot handlers set up")
 
     def run_bot(self):
@@ -325,7 +342,7 @@ class TelegramNotifier:
 
         if not self.application:
             self.setup_bot()
-        
+
         bot_thread_obj = threading.Thread(target=bot_thread, daemon=True)
         bot_thread_obj.start()
         logger.info("Telegram bot thread started")
