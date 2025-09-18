@@ -36,7 +36,6 @@ class TelegramNotifier:
         self.jiit_checker = None
         self._loop = None
         self._loop_thread = None
-        self._start_background_loop()
         logger.info("Telegram notifier initialized with proper connection management")
 
     def _start_background_loop(self):
@@ -386,18 +385,18 @@ class TelegramNotifier:
         logger.info("Telegram bot handlers set up")
 
     def run_bot(self):
+        if not self.application:
+            self.setup_bot()
+
         def bot_thread():
             try:
                 logger.info("Starting Telegram bot...")
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
                 self.application.run_polling(drop_pending_updates=True)
             except Exception as e:
                 logger.error(f"Error running Telegram bot: {e}")
 
-        if not self.application:
-            self.setup_bot()
-
         bot_thread_obj = threading.Thread(target=bot_thread, daemon=True)
         bot_thread_obj.start()
         logger.info("Telegram bot thread started")
+        
+        self._start_background_loop()
