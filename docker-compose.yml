@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  portal-plus:
+    build: .
+    container_name: portal-plus
+    restart: unless-stopped
+    environment:
+      - JIIT_USERNAME=${JIIT_USERNAME}
+      - JIIT_PASSWORD=${JIIT_PASSWORD}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - CHECK_INTERVAL_MINUTES=${CHECK_INTERVAL_MINUTES:-60}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    volumes:
+      - ./logs:/app/logs
+    env_file:
+      - .env
