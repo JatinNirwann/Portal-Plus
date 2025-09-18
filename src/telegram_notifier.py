@@ -6,6 +6,7 @@ from telegram import Update, Bot
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 import threading
 import time
+import httpx
 from jiit_checker import get_short_subject_name
 
 logger = logging.getLogger(__name__)
@@ -21,10 +22,45 @@ class TelegramNotifier:
         if not self.chat_id:
             raise ValueError("TELEGRAM_CHAT_ID environment variable is required")
 
+        self.http_client = httpx.AsyncClient(
+            limits=httpx.Limits(
+                max_keepalive_connections=10,
+                max_connections=20,
+                keepalive_expiry=30.0
+            ),
+            timeout=httpx.Timeout(30.0)
+        )
+        
         self.bot = Bot(token=self.bot_token)
         self.application = None
         self.jiit_checker = None
-        logger.info("Telegram notifier initialized")
+        self._loop = None
+        self._loop_thread = None
+        self._start_background_loop()
+        logger.info("Telegram notifier initialized with proper connection management")
+
+    def _start_background_loop(self):
+        def run_loop():
+            self._loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(self._loop)
+            self._loop.run_forever()
+        
+        self._loop_thread = threading.Thread(target=run_loop, daemon=True)
+        self._loop_thread.start()
+        
+        while self._loop is None:
+            time.sleep(0.01)
+
+    def _run_async(self, coro):
+        if self._loop and not self._loop.is_closed():
+            future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+            try:
+                return future.result(timeout=30.0)
+            except Exception as e:
+                logger.error(f"Async operation failed: {e}")
+                raise
+        else:
+            raise RuntimeError("Background event loop is not running")
 
     async def send_message(self, message: str, parse_mode=None):
         try:
@@ -39,12 +75,19 @@ class TelegramNotifier:
 
     def send_message_sync(self, message: str):
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(self.send_message(message))
-            loop.close()
+            self._run_async(self.send_message(message))
         except Exception as e:
             logger.error(f"Error in sync message send: {e}")
+
+    def cleanup(self):
+        try:
+            if self.http_client:
+                self._run_async(self.http_client.aclose())
+            if self._loop and not self._loop.is_closed():
+                self._loop.call_soon_threadsafe(self._loop.stop)
+            logger.info("Telegram notifier cleaned up")
+        except Exception as e:
+            logger.error(f"Error during cleanup: {e}")
 
     async def send_attendance_alert(self, attendance_data: Dict[str, Any]):
         try:
@@ -71,6 +114,12 @@ class TelegramNotifier:
 
         except Exception as e:
             logger.error(f"Error sending attendance alert: {e}")
+
+    def send_attendance_alert_sync(self, attendance_data: Dict[str, Any]):
+        try:
+            self._run_async(self.send_attendance_alert(attendance_data))
+        except Exception as e:
+            logger.error(f"Error in sync attendance alert send: {e}")
 
     async def send_marks_update(self, marks_data: Dict[str, Any]):
         try:
@@ -118,6 +167,12 @@ class TelegramNotifier:
 
         except Exception as e:
             logger.error(f"Error sending notices alert: {e}")
+
+    def send_new_notices_alert_sync(self, notices: List[Dict[str, Any]]):
+        try:
+            self._run_async(self.send_new_notices_alert(notices))
+        except Exception as e:
+            logger.error(f"Error in sync notices alert send: {e}")
 
     def set_jiit_checker(self, jiit_checker):
         self.jiit_checker = jiit_checker

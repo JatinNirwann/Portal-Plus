@@ -135,10 +135,7 @@ def periodic_check():
             changes = jiit_checker.check_for_changes()
 
             if changes['attendance_below_threshold']:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(notifier.send_attendance_alert(changes['current_data']['attendance']))
-                loop.close()
+                notifier.send_attendance_alert_sync(changes['current_data']['attendance'])
 
             attendance_pct = changes['current_data']['attendance']['attendance_percentage']
 
@@ -171,13 +168,16 @@ def periodic_check():
 
 
 def signal_handler(signum, frame):
-    global running, jiit_checker
+    global running, jiit_checker, notifier
 
     logging.info(f"Received signal {signum}, shutting down gracefully...")
     running = False
 
     if jiit_checker:
         jiit_checker.cleanup()
+    
+    if notifier:
+        notifier.cleanup()
 
     sys.exit(0)
 
@@ -217,6 +217,8 @@ def main():
         logging.error(f"Unexpected error: {e}")
         sys.exit(1)
     finally:
+        if notifier:
+            notifier.cleanup()
         logging.info("=== PortalPlus Stopped ===")
 
 
