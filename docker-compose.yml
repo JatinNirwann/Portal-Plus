@@ -14,5 +14,3 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     volumes:
       - ./logs:/app/logs
-    env_file:
-      - .env
