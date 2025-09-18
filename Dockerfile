@@ -5,25 +5,23 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
-    g++ \
     python3-dev \
-    libffi-dev \
-    libssl-dev \
-    build-essential \
-    pkg-config \
+    git \
     && rm -rf /var/lib/apt/lists/*
 
-# Upgrade pip first
-RUN pip install --upgrade pip setuptools wheel
+# Upgrade pip
+RUN pip install --upgrade pip
 
-# Install common packages that might cause issues
-RUN pip install --no-cache-dir cryptography
-RUN pip install --no-cache-dir lxml
-RUN pip install --no-cache-dir pillow
+# Install packages one by one to identify issues
+RUN pip install --no-cache-dir python-telegram-bot==20.6
+RUN pip install --no-cache-dir python-dotenv==1.0.0
+RUN pip install --no-cache-dir requests==2.31.0
+RUN pip install --no-cache-dir schedule==1.2.0
+RUN pip install --no-cache-dir httpx==0.24.1
 
-# Copy and install remaining requirements
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Try to install pyjiit with git (in case PyPI version has issues)
+RUN pip install --no-cache-dir git+https://github.com/codelif/pyjiit.git || \
+    pip install --no-cache-dir pyjiit
 
 COPY . .
 
