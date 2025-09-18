@@ -1,6 +1,5 @@
-python-telegram-bot==20.6
+python-telegram-bot==20.8
 python-dotenv==1.0.0
 requests==2.31.0
 schedule==1.2.0
 httpx==0.24.1
-pyjiit

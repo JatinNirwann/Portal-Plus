@@ -11,6 +11,3 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
       - CHECK_INTERVAL_MINUTES=${CHECK_INTERVAL_MINUTES:-60}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-    volumes:
-      - ./logs:/app/logs

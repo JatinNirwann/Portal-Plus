@@ -154,7 +154,7 @@ ATTENDANCE_THRESHOLD=75
 LOG_LEVEL=INFO
 ```
 
-## 📊 Monitoring & Logs
+## Monitoring & Logs
 
 - **Console Output**: Real-time logging information
 - **Log Files**: Stored in `jiit_monitor.log` for historical analysis
