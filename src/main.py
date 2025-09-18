@@ -19,12 +19,14 @@ running = True
 def setup_logging():
     log_level = os.getenv('LOG_LEVEL', 'INFO').upper()
 
+    os.makedirs('logs', exist_ok=True)
+
     logging.basicConfig(
         level=getattr(logging, log_level),
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout),
-            logging.FileHandler('portalplus.log', encoding='utf-8')
+            logging.FileHandler('logs/portalplus.log', encoding='utf-8')
         ]
     )
 
