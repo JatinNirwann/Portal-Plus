@@ -163,11 +163,11 @@ class TelegramNotifier:
         self.jiit_checker = jiit_checker
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        welcome_msg = "Welcome to PortalPlus!\n\nI'm your JIIT portal monitoring assistant.\n\nI monitor:\n- Attendance levels\n- Marks\n- Important notices\n\nAvailable Commands:\n/help - Show all commands\n/attendance - Check attendance\n/interval - Set check interval\n/status - System status\n\nMonitoring is now active."
+        welcome_msg = "Welcome to PortalPlus!\n\nI'm your JIIT portal monitoring assistant.\n\nI monitor:\n- Attendance levels\n- Marks\n- Important notices\n\nAvailable Commands:\n/help - Show all commands\n/attendance - Check attendance\n/calc - Calculate attendance needs\n/interval - Set check interval\n/status - System status\n\nMonitoring is now active."
         await update.message.reply_text(welcome_msg)
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        help_msg = "<b>PortalPlus Help</b>\n\n<b>Available Commands:</b>\n\n<b>/start</b> - Welcome message\n<b>/help</b> - Show this help\n<b>/attendance</b> - Check attendance\n<b>/marks</b> - Check semester marks\n<b>/interval [minutes]</b> - Set check interval\n<b>/status</b> - Bot status"
+        help_msg = "<b>PortalPlus Help</b>\n\n<b>Available Commands:</b>\n\n<b>/start</b> - Welcome message\n<b>/help</b> - Show this help\n<b>/attendance</b> - Check attendance\n<b>/marks</b> - Check semester marks\n<b>/calc [percentage]</b> - Calculate attendance requirements\n<b>/interval [minutes]</b> - Set check interval\n<b>/status</b> - Bot status"
         await update.message.reply_text(help_msg, parse_mode='HTML')
 
     async def attendance_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -175,7 +175,7 @@ class TelegramNotifier:
             if not self.jiit_checker:
                 await update.message.reply_text("Portal checker not available")
                 return
-            await update.message.reply_text("Fetching attendance data...")
+            
             attendance_data = self.jiit_checker.fetch_attendance()
             attendance_pct = attendance_data.get('attendance_percentage', 0)
             subjects = attendance_data.get('subjects', {})
@@ -199,9 +199,7 @@ class TelegramNotifier:
                 message += "└─────────────────┴────────────┘"
                 message += "</pre>"
 
-                if attendance_pct >= 85:
-                    status_text = "Excellent"
-                elif attendance_pct >= 75:
+                if attendance_pct >= 75:
                     status_text = "Good"
                 elif attendance_pct >= 65:
                     status_text = "Average"
@@ -214,6 +212,71 @@ class TelegramNotifier:
         except Exception as e:
             logger.error(f"Error in attendance command: {e}")
             await update.message.reply_text("Error fetching attendance data")
+
+    async def calc_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        try:
+            if not self.jiit_checker:
+                await update.message.reply_text("Portal checker not available")
+                return
+
+            if not context.args:
+                await update.message.reply_text("Usage: /calc [target_percentage]\nExample: /calc 60")
+                return
+
+            target_percentage = float(context.args[0])
+            if target_percentage < 0 or target_percentage > 100:
+                await update.message.reply_text("Target percentage must be between 0 and 100")
+                return
+
+            attendance_data = self.jiit_checker.fetch_attendance()
+            subjects = attendance_data.get('subjects', {})
+
+            if not subjects:
+                await update.message.reply_text("No attendance data available")
+                return
+
+            message = f"<b>Classes Needed for {target_percentage}%</b>\n\n"
+            message += "<pre>"
+            message += "┌─────────────────┬────────────┐\n"
+            message += "│ Subject         │ Need       │\n"
+            message += "├─────────────────┼────────────┤\n"
+            
+            for subject, data in subjects.items():
+                total_classes = data.get('total', 0)
+                attended_classes = data.get('attended', 0)
+                current_percentage = data.get('percentage', 0)
+                
+                if total_classes == 0 or current_percentage == 0:
+                    continue
+                
+                short_name = get_short_subject_name(subject)
+                if len(short_name) > 15:
+                    short_name = short_name[:12] + "..."
+                
+                if current_percentage >= target_percentage:
+                    need_text = "Done"
+                else:
+                    numerator = target_percentage * total_classes - 100 * attended_classes
+                    denominator = 100 - target_percentage
+                    
+                    if denominator <= 0:
+                        need_text = "N/A"
+                    else:
+                        classes_needed = max(0, int(numerator / denominator))
+                        need_text = str(classes_needed)
+                
+                message += f"│ {short_name:<15} │ {need_text:>10} │\n"
+            
+            message += "└─────────────────┴────────────┘"
+            message += "</pre>"
+
+            await update.message.reply_text(message, parse_mode='HTML')
+            
+        except ValueError:
+            await update.message.reply_text("Invalid percentage. Example: /calc 60")
+        except Exception as e:
+            logger.error(f"Error in calc command: {e}")
+            await update.message.reply_text("Error calculating attendance")
 
     async def handle_callback_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
@@ -229,50 +292,35 @@ class TelegramNotifier:
                 await update.message.reply_text("Portal checker not available")
                 return
 
-            user_id = update.effective_user.id
-            await update.message.reply_text("Fetching marks for current semester...")
-
             semesters = self.jiit_checker.fetch_marks_semesters()
             if not semesters:
-                await update.message.reply_text("No semesters found\n\nThis could mean:\n• No academic records available\n• Portal connection issue\n• Data not yet uploaded")
+                await update.message.reply_text("No semesters found")
                 return
 
-            # Automatically select the first (current/latest) semester
             semester_name = semesters[0]
-            loading_text = f"Fetching marks for {semester_name}..."
-            await update.message.reply_text(loading_text)
-
             self.jiit_checker.select_marks_semester(semester_name)
             marks = self.jiit_checker.get_current_marks()
 
             if marks and marks['subjects']:
-                header_text = f"<b>Marks for {semester_name}</b>\n\n"
-                marks_text = header_text
+                marks_text = f"<b>Marks for {semester_name}</b>\n\n"
 
                 marks_text += "<pre>"
                 marks_text += "┌─────────────────┬────────┐\n"
                 marks_text += "│ Subject         │ T1     │\n"
                 marks_text += "├─────────────────┼────────┤\n"
 
-                subjects_shown = 0
-                for subject, mark_data in marks['subjects'].items():
-                    if subjects_shown >= 10:  # Limit to 10 subjects to avoid message length limits
-                        marks_text += "│ ... and more subjects ...              │\n"
-                        break
-
+                for subject, mark_data in list(marks['subjects'].items())[:10]:
                     short_name = get_short_subject_name(subject)
                     if len(short_name) > 15:
                         short_name = short_name[:12] + "..."
 
                     t1_marks = mark_data.get('t1', 0)
-
                     if isinstance(t1_marks, str):
                         t1_display = f"{t1_marks:>6}"
                     else:
                         t1_display = f"{t1_marks:>6.1f}"
 
                     marks_text += f"│ {short_name:<15} │ {t1_display} │\n"
-                    subjects_shown += 1
 
                 marks_text += "└─────────────────┴────────┘"
                 marks_text += "</pre>\n\n"
@@ -281,66 +329,40 @@ class TelegramNotifier:
                 marked_count = sum(1 for m in marks['subjects'].values() if (isinstance(m.get('t1', 0), (int, float)) and m.get('t1', 0) > 0) or (isinstance(m.get('t1'), str) and m.get('t1', '').strip()))
                 pending_count = total_subjects - marked_count
 
-                marks_text += f"<b>📊 Summary for {semester_name}:</b>\n"
+                marks_text += f"<b>Summary for {semester_name}:</b>\n"
                 marks_text += f"Total Subjects: {total_subjects}\n"
                 if marked_count > 0:
                     marks_text += f"With T1 Marks: {marked_count}\n"
                 if pending_count > 0:
                     marks_text += f"Pending: {pending_count}\n"
 
-                marks_text += f"\n<i>Last updated: {time.strftime('%Y-%m-%d %H:%M', time.localtime(marks.get('last_updated', time.time())))}</i>"
                 await update.message.reply_text(marks_text, parse_mode='HTML')
             else:
-                await update.message.reply_text(f"No marks found for {semester_name}\n\nThis could mean:\n• Marks haven't been uploaded yet\n• Semester data is not available\n• There might be an issue with the portal")
+                await update.message.reply_text(f"No marks found for {semester_name}")
 
         except Exception as e:
             logger.error(f"Error in marks command: {e}")
-            await update.message.reply_text("Error fetching marks\n\nPlease try again later or contact support if the issue persists.")
+            await update.message.reply_text("Error fetching marks")
 
     async def interval_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             if not context.args:
                 current_interval = int(os.getenv('CHECK_INTERVAL_MINUTES', 60))
-                await update.message.reply_text(f"Current check interval: {current_interval} minutes\n\nUsage: /interval [minutes]\nExample: /interval 30\n\nValid range: 5 to 1440 minutes (24 hours)")
+                await update.message.reply_text(f"Current check interval: {current_interval} minutes\nUsage: /interval [minutes]")
                 return
-            try:
-                new_interval = int(context.args[0])
-                if new_interval < 5:
-                    await update.message.reply_text(f"Error: {new_interval} minutes is too low\n\nMinimum interval is 5 minutes\nPlease use: /interval 5 or higher")
-                    return
-                if new_interval > 1440:
-                    await update.message.reply_text(f"Error: {new_interval} minutes is too high\n\nMaximum interval is 1440 minutes (24 hours)\nPlease use: /interval 1440 or lower")
-                    return
-                os.environ['CHECK_INTERVAL_MINUTES'] = str(new_interval)
-                env_path = os.path.join(os.path.dirname(__file__), '.env')
-                try:
-                    with open(env_path, 'r') as f:
-                        env_content = f.read()
-                    lines = env_content.split('\n')
-                    updated_lines = []
-                    found = False
-                    for line in lines:
-                        if line.startswith('CHECK_INTERVAL_MINUTES='):
-                            updated_lines.append(f'CHECK_INTERVAL_MINUTES={new_interval}')
-                            found = True
-                        else:
-                            updated_lines.append(line)
-                    if not found:
-                        updated_lines.append(f'CHECK_INTERVAL_MINUTES={new_interval}')
-                    with open(env_path, 'w') as f:
-                        f.write('\n'.join(updated_lines))
-                except FileNotFoundError:
-                    logger.warning(".env file not found, only updating environment variable")
-                except PermissionError:
-                    logger.error("Permission denied writing to .env file")
-                    await update.message.reply_text(f"Warning: Updated runtime interval to {new_interval} minutes,\nbut couldn't save to .env file (permission denied).\n\nChanges will be lost on restart.")
-                    return
-                await update.message.reply_text(f"Success: Check interval updated to {new_interval} minutes\n\nPortal will be checked every {new_interval} minutes\nChanges are now active!")
-            except ValueError:
-                await update.message.reply_text(f"Error: '{context.args[0]}' is not a valid number\n\nPlease enter a number between 5 and 1440\nExample: /interval 30")
+            
+            new_interval = int(context.args[0])
+            if new_interval < 5 or new_interval > 1440:
+                await update.message.reply_text("Interval must be between 5 and 1440 minutes")
+                return
+            
+            os.environ['CHECK_INTERVAL_MINUTES'] = str(new_interval)
+            await update.message.reply_text(f"Check interval updated to {new_interval} minutes")
+        except ValueError:
+            await update.message.reply_text("Invalid number. Usage: /interval [minutes]")
         except Exception as e:
             logger.error(f"Error in interval command: {e}")
-            await update.message.reply_text("Error updating interval. Please try again.")
+            await update.message.reply_text("Error updating interval")
 
     async def status_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         checker_status = "Online" if self.jiit_checker else "Offline"
@@ -350,23 +372,17 @@ class TelegramNotifier:
 
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         message_text = update.message.text.lower().strip()
-        if message_text.isdigit():
-            number = int(message_text)
-            if number < 5:
-                await update.message.reply_text(f"Did you mean to set interval to {number} minutes?\n\nMinimum interval is 5 minutes\nUse: /interval 5 or higher")
-            elif number > 1440:
-                await update.message.reply_text(f"Did you mean to set interval to {number} minutes?\n\nMaximum interval is 1440 minutes (24 hours)\nUse: /interval {number} (if valid) or /interval 1440")
-            else:
-                await update.message.reply_text(f"Did you mean to set interval to {number} minutes?\n\nUse the command: /interval {number}")
-            return
+        
         if any(word in message_text for word in ['attendance', 'attend']):
             await self.attendance_command(update, context)
+        elif any(word in message_text for word in ['calc', 'calculate']):
+            await update.message.reply_text("Use: /calc [percentage]\nExample: /calc 60")
         elif any(word in message_text for word in ['interval', 'time', 'check']):
             await self.interval_command(update, context)
         elif any(word in message_text for word in ['help', 'command']):
             await self.help_command(update, context)
         else:
-            quick_help = "Quick Help\n\nTry these commands:\n/attendance - Check attendance\n/interval - Set check interval\n/help - Full help menu"
+            quick_help = "Try these commands:\n/attendance - Check attendance\n/calc - Calculate attendance needs\n/interval - Set check interval\n/help - Full help menu"
             await update.message.reply_text(quick_help)
 
     def setup_bot(self):
@@ -374,6 +390,7 @@ class TelegramNotifier:
         self.application.add_handler(CommandHandler("start", self.start_command))
         self.application.add_handler(CommandHandler("help", self.help_command))
         self.application.add_handler(CommandHandler("attendance", self.attendance_command))
+        self.application.add_handler(CommandHandler("calc", self.calc_command))
         self.application.add_handler(CommandHandler("marks", self.marks_command))
         self.application.add_handler(CommandHandler("interval", self.interval_command))
         self.application.add_handler(CommandHandler("status", self.status_command))
