@@ -4,7 +4,10 @@ import time
 import re
 import io
 import pdfplumber
+import requests
+import json
 from typing import Dict, Any, Optional, List
+from pyjiit.encryption import serialize_payload
 from session_manager import SessionManager, LoginError
 
 class SessionExpired(Exception):
@@ -89,75 +92,178 @@ class JIITChecker:
             logger.error(f"Error checking session validity: {e}")
             return self.login()
 
+    def _get_subject_components(self, subject_data: dict) -> List[Dict[str, str]]:
+        components = []
+        component_ids = subject_data.get('component_ids', {})
+        
+        if component_ids.get('lecture'):
+            components.append({"subjectcomponentid": component_ids['lecture']})
+        if component_ids.get('tutorial'):
+            components.append({"subjectcomponentid": component_ids['tutorial']})
+        if component_ids.get('practical'):
+            components.append({"subjectcomponentid": component_ids['practical']})
+        
+        components.append({"subjectcomponentid": ""})
+        return components
+
+    def _generate_detailed_payload(self, subject_id: str, subject_code: str, subject_data: dict) -> str:
+        try:
+            webportal = self.session_manager.get_webportal()
+            meta = webportal.get_attendance_meta()
+            sem = meta.latest_semester()
+            
+            payload_data = {
+                "instituteid": "11IN1902J000001",
+                "subjectid": str(subject_id),
+                "registrationid": sem.registration_id,
+                "cmpidkey": self._get_subject_components(subject_data),
+                "subjectcode": subject_data.get('individual_subject_code', subject_code),
+                "registrationcode": sem.registration_code
+            }
+            
+            return serialize_payload(payload_data)
+        except Exception as e:
+            logger.error(f"Error generating payload: {e}")
+            return None
+
+    def _get_detailed_subject_attendance(self, subject_id: str, subject_code: str, subject_data: dict) -> Optional[Dict[str, Any]]:
+        try:
+            payload = self._generate_detailed_payload(subject_id, subject_code, subject_data)
+            if not payload:
+                return None
+                
+            headers = self.session_manager.get_headers()
+            request_headers = {
+                'Accept': 'application/json, text/plain, */*',
+                'Authorization': headers.get('Authorization', ''),
+                'Cache-Control': 'no-cache',
+                'Connection': 'keep-alive',
+                'Content-Type': 'application/json',
+                'Host': 'webportal.jiit.ac.in:6011',
+                'LocalName': headers.get('LocalName', ''),
+                'Origin': 'https://webportal.jiit.ac.in:6011',
+                'Referer': 'https://webportal.jiit.ac.in:6011/studentportal/',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
+            
+            session = requests.Session()
+            session.headers.update(request_headers)
+            
+            api_url = "https://webportal.jiit.ac.in:6011/StudentPortalAPI/StudentClassAttendance/getstudentsubjectpersentage"
+            response = session.post(api_url, json=payload, timeout=30)
+            
+            if response.status_code == 200:
+                return response.json()
+            else:
+                logger.warning(f"Detailed API failed for {subject_code}: {response.status_code}")
+                return None
+                
+        except Exception as e:
+            logger.warning(f"Error getting detailed attendance for {subject_code}: {e}")
+            return None
+
     def fetch_attendance(self) -> Dict[str, Any]:
         try:
             if not self.ensure_logged_in():
                 raise LoginError("Failed to establish valid session")
-            logger.info("Fetching attendance data...")
+            logger.info("Fetching attendance data with detailed API...")
+            
             webportal = self.session_manager.get_webportal()
             if not webportal:
                 raise APIError("No webportal session available")
+            
             meta = webportal.get_attendance_meta()
             header = meta.latest_header()
             sem = meta.latest_semester()
             attendance_response = webportal.get_attendance(header, sem)
-            total_classes = 0
-            attended_classes = 0
-            subject_attendance = {}
+            
+            basic_subjects = {}
             if 'studentattendancelist' in attendance_response:
-                logger.info(f"Processing {len(attendance_response['studentattendancelist'])} attendance records")
-                for i, subject_data in enumerate(attendance_response['studentattendancelist']):
-                    if i == 0:
-                        logger.info(f"Available fields: {list(subject_data.keys())}")
+                for subject_data in attendance_response['studentattendancelist']:
                     subject_code = subject_data.get('subjectcode', 'Unknown Subject')
+                    
                     l_total = int(subject_data.get('Ltotalclass', 0) or 0)
                     l_present = int(subject_data.get('Ltotalpres', 0) or 0)
-                    l_percentage = float(subject_data.get('Lpercentage', 0.0) or 0.0)
                     t_total = int(subject_data.get('Ttotalclass', 0) or 0)
                     t_present = int(subject_data.get('Ttotalpres', 0) or 0)
-                    t_percentage = float(subject_data.get('Tpercentage', 0.0) or 0.0)
                     p_total = int(subject_data.get('Ptotalclass', 0) or 0)
                     p_present = int(subject_data.get('Ptotalpres', 0) or 0)
-                    p_percentage = float(subject_data.get('Ppercentage', 0.0) or 0.0)
                     overall_ltp_percentage = float(subject_data.get('LTpercantage', 0.0) or 0.0)
+                    
                     subject_total = l_total + t_total + p_total
                     subject_present = l_present + t_present + p_present
+                    
                     if subject_total == 0:
-                        logger.info(f"Skipping subject with 0 classes: {subject_code}")
                         continue
-                    total_classes += subject_total
-                    attended_classes += subject_present
-                    if overall_ltp_percentage > 0:
-                        subject_percentage = overall_ltp_percentage
-                    elif p_percentage > 0:
-                        subject_percentage = p_percentage
-                    elif l_percentage > 0:
-                        subject_percentage = l_percentage
-                    elif t_percentage > 0:
-                        subject_percentage = t_percentage
-                    else:
-                        subject_percentage = (subject_present / subject_total * 100) if subject_total > 0 else 0
-                    subject_attendance[subject_code] = {
+                        
+                    basic_subjects[subject_code] = {
                         'total': subject_total,
                         'attended': subject_present,
-                        'percentage': subject_percentage,
-                        'overall_ltp_percentage': overall_ltp_percentage,
-                        'lecture_percentage': l_percentage,
-                        'tutorial_percentage': t_percentage,
-                        'practical_percentage': p_percentage
+                        'percentage': overall_ltp_percentage if overall_ltp_percentage > 0 else (subject_present / subject_total * 100),
+                        'subject_id': subject_data.get('subjectid', ''),
+                        'individual_subject_code': subject_data.get('individualsubjectcode', ''),
+                        'component_ids': {
+                            'lecture': subject_data.get('Lsubjectcomponentid', ''),
+                            'tutorial': subject_data.get('Tsubjectcomponentid', ''),
+                            'practical': subject_data.get('Psubjectcomponentid', '')
+                        }
                     }
-                    logger.info(f"Processed: {subject_code} - {subject_percentage:.1f}% ({subject_present}/{subject_total})")
-            overall_percentage = (attended_classes / total_classes * 100) if total_classes > 0 else 0
+            
+            enhanced_subjects = {}
+            total_classes = 0
+            total_attended = 0
+            
+            for subject_name, basic_data in basic_subjects.items():
+                subject_id = basic_data.get('subject_id')
+                if not subject_id:
+                    enhanced_subjects[subject_name] = basic_data
+                    continue
+                
+                subject_code = basic_data.get('individual_subject_code', '')
+                detailed_data = self._get_detailed_subject_attendance(subject_id, subject_code, basic_data)
+                
+                if detailed_data and detailed_data.get('status', {}).get('responseStatus') == 'Success':
+                    attendance_list = detailed_data.get('response', {}).get('studentAttdsummarylist', [])
+                    
+                    if attendance_list:
+                        total_classes_subject = len(attendance_list)
+                        present_count = sum(1 for record in attendance_list if record.get('present') == 'Present')
+                        absent_count = total_classes_subject - present_count
+                        percentage = (present_count / total_classes_subject * 100) if total_classes_subject > 0 else 0
+                        
+                        enhanced_subjects[subject_name] = {
+                            'total': total_classes_subject,
+                            'attended': present_count,
+                            'absent': absent_count,
+                            'percentage': percentage,
+                            'subject_id': subject_id,
+                            'subject_code': subject_code,
+                            'detailed_data': attendance_list
+                        }
+                        
+                        total_classes += total_classes_subject
+                        total_attended += present_count
+                        continue
+                
+                enhanced_subjects[subject_name] = basic_data
+                total_classes += basic_data.get('total', 0)
+                total_attended += basic_data.get('attended', 0)
+            
+            overall_percentage = (total_attended / total_classes * 100) if total_classes > 0 else 0
+            
             attendance_data = {
                 'total_classes': total_classes,
-                'attended_classes': attended_classes,
+                'attended_classes': total_attended,
                 'attendance_percentage': overall_percentage,
-                'subjects': subject_attendance,
+                'subjects': enhanced_subjects,
                 'current_semester': attendance_response.get('currentSem', 'Unknown'),
-                'last_updated': time.time()
+                'last_updated': time.time(),
+                'enhanced': True
             }
-            logger.info(f"Attendance fetched: {attendance_data['attendance_percentage']:.1f}% across {len(subject_attendance)} subjects")
+            
+            logger.info(f"Enhanced attendance fetched: {overall_percentage:.1f}% across {len(enhanced_subjects)} subjects")
             return attendance_data
+            
         except Exception as e:
             logger.error(f"Error fetching attendance: {e}")
             raise

@@ -24,6 +24,9 @@ class TelegramNotifier:
         self._loop = None
         self._loop_thread = None
         self._running = False
+        self._attendance_fetching = False
+        self._cached_attendance = None
+        self._cache_timestamp = 0
         self._start_background_loop()
         logger.info("Telegram notifier initialized")
 
@@ -92,7 +95,7 @@ class TelegramNotifier:
                 message += "│ Subject         │ Attendance │\n"
                 message += "├─────────────────┼────────────┤\n"
 
-                for subject, percentage in low_subjects[:8]:  # Limit to 8 subjects
+                for subject, percentage in low_subjects[:8]:
                     short_name = get_short_subject_name(subject)
                     if len(short_name) > 15:
                         short_name = short_name[:12] + "..."
@@ -167,7 +170,7 @@ class TelegramNotifier:
         await update.message.reply_text(welcome_msg)
 
     async def help_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        help_msg = "<b>PortalPlus Help</b>\n\n<b>Available Commands:</b>\n\n<b>/start</b> - Welcome message\n<b>/help</b> - Show this help\n<b>/attendance</b> - Check attendance\n<b>/marks</b> - Check semester marks\n<b>/calc [percentage]</b> - Calculate attendance requirements\n<b>/interval [minutes]</b> - Set check interval\n<b>/status</b> - Bot status"
+        help_msg = "<b>PortalPlus Help</b>\n\n<b>Available Commands:</b>\n\n<b>/start</b> - Welcome message\n<b>/help</b> - Show this help\n<b>/attendance</b> - Check attendance\n<b>/marks</b> - Check semester marks\n<b>/calc [percentage]</b> - Calculate additional classes needed to reach target attendance\n<b>/interval [minutes]</b> - Set check interval\n<b>/status</b> - Bot status"
         await update.message.reply_text(help_msg, parse_mode='HTML')
 
     async def attendance_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -176,7 +179,27 @@ class TelegramNotifier:
                 await update.message.reply_text("Portal checker not available")
                 return
             
-            attendance_data = self.jiit_checker.fetch_attendance()
+            current_time = time.time()
+            cache_age = (current_time - self._cache_timestamp) / 60
+            
+            if self._attendance_fetching:
+                await update.message.reply_text("Attendance check in progress, please wait...")
+                return
+            
+            if self._cached_attendance and cache_age < 30:
+                attendance_data = self._cached_attendance
+                message_suffix = f"\n<i>Cached data ({int(cache_age)} min ago)</i>"
+            else:
+                await update.message.reply_text("Fetching attendance data...")
+                self._attendance_fetching = True
+                try:
+                    attendance_data = self.jiit_checker.fetch_attendance()
+                    self._cached_attendance = attendance_data
+                    self._cache_timestamp = current_time
+                    message_suffix = "\n<i>Real-time data</i>"
+                finally:
+                    self._attendance_fetching = False
+            
             attendance_pct = attendance_data.get('attendance_percentage', 0)
             subjects = attendance_data.get('subjects', {})
 
@@ -207,11 +230,13 @@ class TelegramNotifier:
                     status_text = "Low"
 
                 message += f"\n\n<b>Status: {status_text}</b>"
+                message += message_suffix
 
             await update.message.reply_text(message, parse_mode='HTML')
         except Exception as e:
             logger.error(f"Error in attendance command: {e}")
             await update.message.reply_text("Error fetching attendance data")
+            self._attendance_fetching = False
 
     async def calc_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
@@ -228,17 +253,38 @@ class TelegramNotifier:
                 await update.message.reply_text("Target percentage must be between 0 and 100")
                 return
 
-            attendance_data = self.jiit_checker.fetch_attendance()
+            current_time = time.time()
+            cache_age = (current_time - self._cache_timestamp) / 60
+            
+            if self._attendance_fetching:
+                await update.message.reply_text("Attendance check in progress, please wait...")
+                return
+            
+            if self._cached_attendance and cache_age < 30:
+                attendance_data = self._cached_attendance
+                data_info = f"Cached data ({int(cache_age)} min ago)"
+            else:
+                await update.message.reply_text("Calculating requirements...")
+                self._attendance_fetching = True
+                try:
+                    attendance_data = self.jiit_checker.fetch_attendance()
+                    self._cached_attendance = attendance_data
+                    self._cache_timestamp = current_time
+                    data_info = "Real-time data"
+                finally:
+                    self._attendance_fetching = False
+
             subjects = attendance_data.get('subjects', {})
 
             if not subjects:
                 await update.message.reply_text("No attendance data available")
+                self._attendance_fetching = False
                 return
 
-            message = f"<b>Classes Needed for {target_percentage}%</b>\n\n"
+            message = f"<b>Additional Classes Needed for {target_percentage}%</b>\n\n"
             message += "<pre>"
             message += "┌─────────────────┬────────────┐\n"
-            message += "│ Subject         │ Need       │\n"
+            message += "│ Subject         │ Additional │\n"
             message += "├─────────────────┼────────────┤\n"
             
             for subject, data in subjects.items():
@@ -246,7 +292,7 @@ class TelegramNotifier:
                 attended_classes = data.get('attended', 0)
                 current_percentage = data.get('percentage', 0)
                 
-                if total_classes == 0 or current_percentage == 0:
+                if total_classes == 0:
                     continue
                 
                 short_name = get_short_subject_name(subject)
@@ -256,34 +302,43 @@ class TelegramNotifier:
                 if current_percentage >= target_percentage:
                     need_text = "Done"
                 else:
-                    numerator = target_percentage * total_classes - 100 * attended_classes
-                    denominator = 100 - target_percentage
+                    target_decimal = target_percentage / 100.0
                     
-                    if denominator <= 0:
+                    total_absences = total_classes - attended_classes
+                    
+                    if target_decimal >= 1.0:
                         need_text = "N/A"
                     else:
-                        classes_needed = max(0, int(numerator / denominator))
-                        need_text = str(classes_needed)
+                        total_classes_needed = total_absences / (1 - target_decimal)
+                        additional_classes_needed = total_classes_needed - total_classes
+                        
+                        if additional_classes_needed <= 0:
+                            need_text = "Done"
+                        else:
+                            classes_needed = max(0, round(additional_classes_needed))
+                            need_text = str(classes_needed)
                 
                 message += f"│ {short_name:<15} │ {need_text:>10} │\n"
             
             message += "└─────────────────┴────────────┘"
             message += "</pre>"
+            message += f"\n<i>{data_info}</i>"
 
             await update.message.reply_text(message, parse_mode='HTML')
             
         except ValueError:
             await update.message.reply_text("Invalid percentage. Example: /calc 60")
+            self._attendance_fetching = False
         except Exception as e:
             logger.error(f"Error in calc command: {e}")
             await update.message.reply_text("Error calculating attendance")
+            self._attendance_fetching = False
 
     async def handle_callback_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
         callback_data = query.data
 
-        # Handle any future callback queries here
         await query.edit_message_text("This feature is not currently available.")
 
     async def marks_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -292,6 +347,8 @@ class TelegramNotifier:
                 await update.message.reply_text("Portal checker not available")
                 return
 
+            await update.message.reply_text("Fetching marks data...")
+            
             semesters = self.jiit_checker.fetch_marks_semesters()
             if not semesters:
                 await update.message.reply_text("No semesters found")
